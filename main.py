@@ -119,12 +119,15 @@ def get_user_access_token(
         return None
 
     response_data = response.json()
-    access_token: str = response_data.get("access_token")
-    expires_in: int = response_data.get("expires_in")
-    refresh_token: str = response_data.get("refresh_token")
+    access_token: str = response_data["access_token"]
+    expires_in: int = response_data["expires_in"]
+    refresh_token: str = response_data["refresh_token"]
 
-    expires_in_dt = datetime.utcnow() + timedelta(seconds=expires_in)
-    return UserAuth(access_token, refresh_token, expires_in_dt)
+    expires_at = (
+        datetime.utcnow() + timedelta(seconds=expires_in)
+    ).timestamp()
+
+    return UserAuth(access_token, refresh_token, expires_in, expires_at)
 
 
 def main() -> int:
@@ -158,8 +161,8 @@ def main() -> int:
 
     print(profile_response.json())
 
-    with open("response_data.json", mode="w+") as file:
-        json.dump(profile_response.json(), file, indent=4)
+    with open("access_token.json", mode="w+") as file:
+        json.dump(user_access_token._asdict(), file, indent=4)
 
     return 0
 

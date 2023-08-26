@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import NamedTuple
 
 
@@ -12,4 +11,5 @@ class ClientCreds(NamedTuple):
 class UserAuth(NamedTuple):
     access_token: str
     refresh_token: str
-    expires_in: datetime
+    expires_in: int
+    expires_at: float
