@@ -41,22 +41,22 @@ class AuthRequestHandler(BaseHTTPRequestHandler):
 
         # Request failiar
         if query_state is None or len(query_state) < 1:
-            return self._generate_response(400, "error.html")
+            return self._generate_response(400, "src/templates/error.html")
 
         # State value missmach
         if self.server.state != query_state[0]:
-            return self._generate_response(400, "error.html")
+            return self._generate_response(400, "src/templates/error.html")
 
         # Auth Api did not autharize
         if query_code is None or len(query_code) < 1:
             logging.error(
                 f"Authorization code requet erorr: {query.get('error')}"
             )
-            return self._generate_response(401, "error.html")
+            return self._generate_response(401, "src/templates/error.html")
 
         self.server.code = query_code[0]
 
-        return self._generate_response(200, "index.html")
+        return self._generate_response(200, "src/templates/index.html")
 
 
 def get_authorization_code(client_creds: ClientCreds) -> str | None:
