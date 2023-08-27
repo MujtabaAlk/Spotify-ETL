@@ -15,6 +15,7 @@ import httpx
 
 from data import ClientCreds
 from data import UserAuth
+from response_data import AccessTokenResponse
 
 
 class AuthServer(HTTPServer):
@@ -118,10 +119,10 @@ def get_user_access_token(
         logging.error("Unable to obtain access token")
         return None
 
-    response_data = response.json()
-    access_token: str = response_data["access_token"]
-    expires_in: int = response_data["expires_in"]
-    refresh_token: str = response_data["refresh_token"]
+    response_data: AccessTokenResponse = response.json()
+    access_token = response_data["access_token"]
+    expires_in = response_data["expires_in"]
+    refresh_token = response_data["refresh_token"]
 
     expires_at = (
         datetime.utcnow() + timedelta(seconds=expires_in)
