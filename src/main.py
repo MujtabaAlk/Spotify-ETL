@@ -5,7 +5,9 @@ import json
 import logging
 import secrets
 import webbrowser
+from datetime import date
 from datetime import datetime
+from datetime import time
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler
 from http.server import HTTPServer
@@ -61,7 +63,7 @@ class AuthRequestHandler(BaseHTTPRequestHandler):
 
 
 def get_authorization_code(client_creds: ClientCreds) -> str | None:
-    scope = "user-read-email"
+    scope = "user-read-email user-read-recently-played"
     redirect_uri = "http://127.0.0.1:9090/"
     state = secrets.token_urlsafe(16)
 
@@ -151,6 +153,9 @@ def main() -> int:
         logging.error("Unable to get access token")
         return -1
 
+    with open("access_token.json", mode="w+") as file:
+        json.dump(user_access_token._asdict(), file, indent=4)
+
     # Request profile data
     profile_response = httpx.get(
         "https://api.spotify.com/v1/me",
@@ -158,12 +163,42 @@ def main() -> int:
     )
 
     if profile_response.status_code != 200:
-        logging.error(f"status code: {profile_response.status_code}")
+        logging.error(
+            f"status code: {profile_response.status_code}, on profile request"
+        )
 
     print(profile_response.json())
 
-    with open("access_token.json", mode="w+") as file:
-        json.dump(user_access_token._asdict(), file, indent=4)
+    # Request recently played song list
+    item_limit = 50
+    after_ts = int(
+        (
+            datetime.combine(date.today(), time.min) - timedelta(days=30)
+        ).timestamp()
+        * 1000
+    )
+
+    data_response = httpx.get(
+        "https://api.spotify.com/v1/me/player/recently-played",
+        headers={"Authorization": f"Bearer {user_access_token.access_token}"},
+        params={
+            "limit": item_limit,
+            "after": after_ts,
+        },
+    )
+
+    if data_response.status_code != 200:
+        logging.error(
+            f"status code: {data_response.status_code}, on recently played"
+        )
+
+    recently_played_data = data_response.json()
+
+    with open(
+        f"recently_played_data/{int(datetime.utcnow().timestamp()*1000)}.json",
+        mode="w+",
+    ) as file:
+        json.dump(recently_played_data, file, indent=4)
 
     return 0
 
