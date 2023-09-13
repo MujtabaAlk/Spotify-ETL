@@ -14,10 +14,17 @@ from http.server import HTTPServer
 from urllib import parse
 
 import httpx
+from sqlalchemy import create_engine
+from sqlalchemy import insert
+from sqlalchemy import select
 
 from data import ClientCreds
 from data import UserAuth
+from database import SongTable
+from database import SongDBMapping
+from database import map_song_items
 from response_data import AccessTokenResponse
+from response_data import RecentlyPlayedResponse
 
 
 class AuthServer(HTTPServer):
@@ -192,13 +199,33 @@ def main() -> int:
             f"status code: {data_response.status_code}, on recently played"
         )
 
-    recently_played_data = data_response.json()
+    recently_played_data: RecentlyPlayedResponse = data_response.json()
 
-    with open(
-        f"recently_played_data/{int(datetime.utcnow().timestamp()*1000)}.json",
-        mode="w+",
-    ) as file:
-        json.dump(recently_played_data, file, indent=4)
+    engine = create_engine("sqlite:///data.db")
+
+    with engine.connect() as conn:
+        select_stmt = select(SongTable.c.timestamp)
+
+        res = conn.execute(select_stmt)
+        timestamp_set: set[int] = {row[0] for row in res.tuples()}
+
+    insert_values: list[SongDBMapping] = []
+    for item in recently_played_data["items"]:
+        mapped_item = map_song_items(item)
+        if mapped_item["timestamp"] not in timestamp_set:
+            insert_values.append(mapped_item)
+
+    if len(insert_values) == 0:
+        print("No items to insert")
+        return 0
+
+    with engine.begin() as conn:
+        insert_stmt = insert(SongTable)
+
+        res = conn.execute(insert_stmt, parameters=insert_values)
+        inserted_keys = res.inserted_primary_key_rows
+
+    print(f"Inserted {len(inserted_keys)} values")
 
     return 0
 
