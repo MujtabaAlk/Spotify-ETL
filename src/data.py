@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import NamedTuple
 
 
-class ClientCreds(NamedTuple):
+class AppConfig(NamedTuple):
     client_id: str
     client_secret: str
+    database_url: str
 
 
 class UserAuth(NamedTuple):
