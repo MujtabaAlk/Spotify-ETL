@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import secrets
 import webbrowser
 from datetime import date
@@ -138,6 +139,57 @@ def get_user_access_token(
     return UserAuth(access_token, refresh_token, expires_in, expires_at)
 
 
+def authenticate(app_config: AppConfig) -> UserAuth | None:
+    auth_code = get_authorization_code(app_config)
+    if auth_code is None or auth_code == "":
+        logging.error("Unable to get authorization code")
+        return None
+
+    user_auth = get_user_access_token(app_config, auth_code)
+
+    return user_auth
+
+
+def refresh_token(
+    app_config: AppConfig, user_auth: UserAuth
+) -> UserAuth | None:
+    logging.info("Refreshing token")
+    # request body
+    grant_type = "refresh_token"
+    # request headers
+    content_type = "application/x-www-form-urlencoded"
+    client_b64 = base64.b64encode(
+        f"{app_config.client_id}:{app_config.client_secret}".encode("ascii")
+    ).decode("ascii")
+
+    response = httpx.post(
+        "https://accounts.spotify.com/api/token",
+        headers={
+            "Authorization": f"Basic {client_b64}",
+            "Content-Type": content_type,
+        },
+        data={
+            "grant_type": grant_type,
+            "refresh_token": user_auth.refresh_token,
+        },
+    )
+
+    if response.status_code != 200:
+        logging.error("Unable to obtain refresh token")
+        return None
+
+    response_data: AccessTokenResponse = response.json()
+    access_token = response_data["access_token"]
+    expires_in = response_data["expires_in"]
+    refresh_token = user_auth.refresh_token
+
+    expires_at = (
+        datetime.utcnow() + timedelta(seconds=expires_in)
+    ).timestamp()
+
+    return UserAuth(access_token, refresh_token, expires_in, expires_at)
+
+
 def main() -> int:
     print("Hey Hi, Hello!")
     # logging.getLogger().setLevel(logging.INFO)
@@ -145,25 +197,29 @@ def main() -> int:
     with open("config.json") as file:
         app_config = AppConfig(**json.load(file))
 
-    # Get authorization code
-    auth_code = get_authorization_code(app_config)
-    if auth_code is None or auth_code == "":
-        logging.error("Unable to get authorization code")
-        return -1
+    if not os.path.isfile("access_token.json"):
+        user_auth_return = authenticate(app_config)
+        if user_auth_return is None:
+            logging.error("Unable to get access token")
+            return -1
+        user_auth = user_auth_return
+    else:
+        with open("access_token.json") as file:
+            user_auth = UserAuth(**json.load(file))
 
-    # Get access token
-    user_access_token = get_user_access_token(app_config, auth_code)
-    if user_access_token is None:
-        logging.error("Unable to get access token")
-        return -1
+    if datetime.utcnow() >= datetime.fromtimestamp(user_auth.expires_at):
+        refresh_token_return = refresh_token(app_config, user_auth)
+        if refresh_token_return is None:
+            logging.error("Unable to get access token")
+            return -1
+        user_auth = refresh_token_return
 
     with open("access_token.json", mode="w+") as file:
-        json.dump(user_access_token._asdict(), file, indent=4)
+        json.dump(user_auth._asdict(), file, indent=4)
 
-    # Request profile data
     profile_response = httpx.get(
         "https://api.spotify.com/v1/me",
-        headers={"Authorization": f"Bearer {user_access_token.access_token}"},
+        headers={"Authorization": f"Bearer {user_auth.access_token}"},
     )
 
     if profile_response.status_code != 200:
@@ -173,7 +229,6 @@ def main() -> int:
 
     print(profile_response.json())
 
-    # Request recently played song list
     item_limit = 50
     after_ts = int(
         (
@@ -184,7 +239,7 @@ def main() -> int:
 
     data_response = httpx.get(
         "https://api.spotify.com/v1/me/player/recently-played",
-        headers={"Authorization": f"Bearer {user_access_token.access_token}"},
+        headers={"Authorization": f"Bearer {user_auth.access_token}"},
         params={
             "limit": item_limit,
             "after": after_ts,
