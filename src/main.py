@@ -18,7 +18,7 @@ from sqlalchemy import create_engine
 from sqlalchemy import insert
 from sqlalchemy import select
 
-from data import ClientCreds
+from data import AppConfig
 from data import UserAuth
 from database import SongTable
 from database import SongDBMapping
@@ -69,13 +69,13 @@ class AuthRequestHandler(BaseHTTPRequestHandler):
         return self._generate_response(200, "src/templates/index.html")
 
 
-def get_authorization_code(client_creds: ClientCreds) -> str | None:
+def get_authorization_code(app_config: AppConfig) -> str | None:
     scope = "user-read-email user-read-recently-played"
     redirect_uri = "http://127.0.0.1:9090/"
     state = secrets.token_urlsafe(16)
 
     query_params = {
-        "client_id": client_creds.client_id,
+        "client_id": app_config.client_id,
         "response_type": "code",
         "redirect_uri": redirect_uri,
         "state": state,
@@ -98,7 +98,7 @@ def get_authorization_code(client_creds: ClientCreds) -> str | None:
 
 
 def get_user_access_token(
-    client_creds: ClientCreds, auth_code: str
+    app_config: AppConfig, auth_code: str
 ) -> UserAuth | None:
     # request body
     grant_type = "authorization_code"
@@ -106,9 +106,7 @@ def get_user_access_token(
     # request headers
     content_type = "application/x-www-form-urlencoded"
     client_b64 = base64.b64encode(
-        f"{client_creds.client_id}:{client_creds.client_secret}".encode(
-            "ascii"
-        )
+        f"{app_config.client_id}:{app_config.client_secret}".encode("ascii")
     ).decode("ascii")
 
     response = httpx.post(
@@ -144,18 +142,17 @@ def main() -> int:
     print("Hey Hi, Hello!")
     # logging.getLogger().setLevel(logging.INFO)
 
-    # Load Creds
-    with open("client_credentials.json") as file:
-        client_creds = ClientCreds(**json.load(file))
+    with open("config.json") as file:
+        app_config = AppConfig(**json.load(file))
 
     # Get authorization code
-    auth_code = get_authorization_code(client_creds)
+    auth_code = get_authorization_code(app_config)
     if auth_code is None or auth_code == "":
         logging.error("Unable to get authorization code")
         return -1
 
     # Get access token
-    user_access_token = get_user_access_token(client_creds, auth_code)
+    user_access_token = get_user_access_token(app_config, auth_code)
     if user_access_token is None:
         logging.error("Unable to get access token")
         return -1
@@ -201,7 +198,7 @@ def main() -> int:
 
     recently_played_data: RecentlyPlayedResponse = data_response.json()
 
-    engine = create_engine("sqlite:///data.db")
+    engine = create_engine(app_config.database_url)
 
     with engine.connect() as conn:
         select_stmt = select(SongTable.c.timestamp)
